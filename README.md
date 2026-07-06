@@ -1,2 +1,3 @@
 # practical-angular-architecture
-Practica Angular Architecture
+
+Dedicated repository for the Practical Angular Architecture article series.
