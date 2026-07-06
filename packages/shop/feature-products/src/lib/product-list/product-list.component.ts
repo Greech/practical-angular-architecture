@@ -14,7 +14,8 @@ import {
   ProductGridComponent,
   LoadingSpinnerComponent,
   ErrorMessageComponent,
-  ProductFiltersComponent,
+  FilterModalComponent,
+  ActiveFiltersComponent,
   ProductFilters,
 } from '@org/shop/shared-ui';
 
@@ -25,7 +26,8 @@ import {
     ProductGridComponent,
     LoadingSpinnerComponent,
     ErrorMessageComponent,
-    ProductFiltersComponent,
+    FilterModalComponent,
+    ActiveFiltersComponent,
   ],
   template: `
     <div class="product-list-container">
@@ -34,9 +36,29 @@ import {
         <p>Explore our wide selection of high-quality products</p>
       </header>
 
-      <shop-product-filters
+      <div class="filter-bar">
+        <button class="btn-filter" (click)="openFilterModal()">
+          Filters
+          @if (activeFiltersCount() > 0) {
+            <span class="filter-badge">{{ activeFiltersCount() }}</span>
+          }
+        </button>
+      </div>
+
+      @if (activeFiltersCount() > 0) {
+        <shop-active-filters
+          [filters]="currentFilters()"
+          (chipRemove)="clearFilter($event)"
+          (filtersCleared)="clearAllFilters()"
+        />
+      }
+
+      <shop-filter-modal
+        [isOpen]="isFilterModalOpen()"
         [categories]="categories()"
-        (filtersChange)="onFiltersChange($event)"
+        [initialFilters]="currentFilters()"
+        (apply)="onFiltersApply($event)"
+        (closed)="onFilterModalClose()"
       />
 
       @if (loading()) {
@@ -110,6 +132,44 @@ import {
         font-size: 0.95rem;
       }
 
+      .filter-bar {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 24px;
+      }
+
+      .btn-filter {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 20px;
+        background: #3498db;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1rem;
+        transition: background 0.2s;
+      }
+
+      .btn-filter:hover {
+        background: #2980b9;
+      }
+
+      .filter-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        background: white;
+        color: #3498db;
+        border-radius: 50%;
+        font-size: 0.75rem;
+        font-weight: 700;
+        line-height: 1;
+      }
+
       .pagination {
         display: flex;
         justify-content: center;
@@ -178,8 +238,15 @@ export class ProductListComponent implements OnInit {
     inStockOnly: false,
   });
 
+  // Modal state
+  readonly isFilterModalOpen = signal(false);
+
   // Computed values
   readonly hasMorePages = computed(() => this.totalPages() > 1);
+  readonly activeFiltersCount = computed(() => {
+    const { searchTerm, category, inStockOnly } = this.currentFilters();
+    return [searchTerm, category, inStockOnly].filter(Boolean).length;
+  });
 
   ngOnInit() {
     this.loadCategories();
@@ -225,8 +292,38 @@ export class ProductListComponent implements OnInit {
     });
   }
 
-  onFiltersChange(filters: ProductFilters): void {
+  openFilterModal(): void {
+    this.isFilterModalOpen.set(true);
+  }
+
+  onFiltersApply(filters: ProductFilters): void {
+    this.isFilterModalOpen.set(false);
     this.currentFilters.set(filters);
+    this.currentPage.set(1);
+    this.loadProducts();
+  }
+
+  onFilterModalClose(): void {
+    this.isFilterModalOpen.set(false);
+  }
+
+  clearFilter(key: keyof ProductFilters): void {
+    const defaults: ProductFilters = {
+      searchTerm: '',
+      category: '',
+      inStockOnly: false,
+    };
+    this.currentFilters.update((f) => ({ ...f, [key]: defaults[key] }));
+    this.currentPage.set(1);
+    this.loadProducts();
+  }
+
+  clearAllFilters(): void {
+    this.currentFilters.set({
+      searchTerm: '',
+      category: '',
+      inStockOnly: false,
+    });
     this.currentPage.set(1);
     this.loadProducts();
   }

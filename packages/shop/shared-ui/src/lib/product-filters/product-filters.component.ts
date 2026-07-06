@@ -2,6 +2,7 @@ import {
   Component,
   input,
   output,
+  OnInit,
   ChangeDetectionStrategy,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -117,13 +118,25 @@ export interface ProductFilters {
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ProductFiltersComponent {
+export class ProductFiltersComponent implements OnInit {
   readonly categories = input<string[]>([]);
+  readonly initialFilters = input<ProductFilters>({
+    searchTerm: '',
+    category: '',
+    inStockOnly: false,
+  });
   readonly filtersChange = output<ProductFilters>();
 
   searchTerm = '';
   selectedCategory = '';
   inStockOnly = false;
+
+  ngOnInit(): void {
+    const f = this.initialFilters();
+    this.searchTerm = f.searchTerm;
+    this.selectedCategory = f.category;
+    this.inStockOnly = f.inStockOnly;
+  }
 
   onFiltersChange(): void {
     this.filtersChange.emit({
