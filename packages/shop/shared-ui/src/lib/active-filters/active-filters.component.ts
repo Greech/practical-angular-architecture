@@ -134,7 +134,6 @@ export class ActiveFiltersComponent {
   readonly filtersCleared = output<void>();
 
   readonly activeChips = computed<FilterChip[]>(() => {
-    console.log('Computing active chips for filters:', this.filters());
     const { searchTerm, category, inStockOnly } = this.filters();
     const chips: FilterChip[] = [];
 

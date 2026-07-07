@@ -1,5 +1,6 @@
-import { Component, ChangeDetectionStrategy } from '@angular/core';
+import { Component, inject, ChangeDetectionStrategy } from '@angular/core';
 import { RouterModule } from '@angular/router';
+import { ShopRefreshService } from '@org/shop/data';
 
 @Component({
   imports: [RouterModule],
@@ -9,5 +10,10 @@ import { RouterModule } from '@angular/router';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class App {
-  protected title = 'Nx Shop Demo';
+  protected readonly title = 'Nx Shop Demo';
+  private readonly refreshService = inject(ShopRefreshService);
+
+  refresh(): void {
+    this.refreshService.triggerRefresh();
+  }
 }

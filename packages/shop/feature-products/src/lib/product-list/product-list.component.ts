@@ -4,11 +4,13 @@ import {
   signal,
   computed,
   OnInit,
+  DestroyRef,
   ChangeDetectionStrategy,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { ProductsService } from '@org/shop/data';
+import { ProductsService, ShopRefreshService } from '@org/shop/data';
 import { Product, ProductFilter } from '@org/models';
 import {
   ProductGridComponent,
@@ -221,6 +223,8 @@ import {
 export class ProductListComponent implements OnInit {
   private readonly productsService = inject(ProductsService);
   private readonly router = inject(Router);
+  private readonly refreshService = inject(ShopRefreshService);
+  private readonly destroyRef = inject(DestroyRef);
 
   // State signals
   readonly products = signal<Product[]>([]);
@@ -245,12 +249,15 @@ export class ProductListComponent implements OnInit {
   readonly hasMorePages = computed(() => this.totalPages() > 1);
   readonly activeFiltersCount = computed(() => {
     const { searchTerm, category, inStockOnly } = this.currentFilters();
-    return [searchTerm, category, inStockOnly].filter(Boolean).length;
+    return (searchTerm ? 1 : 0) + (category ? 1 : 0) + (inStockOnly ? 1 : 0);
   });
 
   ngOnInit() {
     this.loadCategories();
     this.loadProducts();
+    this.refreshService.refresh$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.loadProducts());
   }
 
   loadCategories() {
