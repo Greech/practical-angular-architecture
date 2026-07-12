@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { ProductsService } from '@org/shop/data';
 import { Product } from '@org/models';
 import { ProductFilters } from '@org/shop/shared-ui';
+import { ProductListCacheService } from './product-list-cache.service';
 
 export type ErrorMessage =
   'LOADING_CATEGORIES_FAILED' | 'LOADING_PRODUCTS_FAILED';
@@ -40,6 +41,7 @@ export const initialDomainListState: DomainListState = {
 @Injectable()
 export class DomainProductListStore {
   private readonly productsService = inject(ProductsService);
+  private readonly cache = inject(ProductListCacheService);
   private readonly store = signal<DomainListState>(initialDomainListState);
 
   readonly products = computed(() => this.store().products);
@@ -77,13 +79,31 @@ export class DomainProductListStore {
   }
 
   loadProducts() {
-    this.store.update((state) => ({ ...state, loading: true, error: null }));
-
-    const filters: ProductFilters = this.store().currentFilters;
+    const filters = this.store().currentFilters;
     const currentPage = this.store().currentPage;
+
+    const cached = this.cache.get(filters, currentPage);
+    if (cached) {
+      this.store.update((state) => ({
+        ...state,
+        products: cached.items,
+        totalProducts: cached.total,
+        totalPages: cached.totalPages,
+        loading: false,
+        error: null,
+      }));
+      return;
+    }
+
+    this.store.update((state) => ({ ...state, loading: true, error: null }));
 
     this.productsService.getProducts(filters, currentPage).subscribe({
       next: (response) => {
+        this.cache.set(filters, currentPage, {
+          items: response.items,
+          total: response.total,
+          totalPages: response.totalPages,
+        });
         this.store.update((state) => ({
           ...state,
           products: response.items,
@@ -143,5 +163,9 @@ export class DomainProductListStore {
       ...state,
       currentPage: state.currentPage - 1,
     }));
+  }
+
+  invalidateCache(): void {
+    this.cache.invalidate();
   }
 }

@@ -42,6 +42,10 @@ export class FeatureListFacade {
     this.store.loadProducts();
   }
 
+  invalidateCache(): void {
+    this.store.invalidateCache();
+  }
+
   openFilterModal(): void {
     this.isFilterModalOpen.set(true);
   }

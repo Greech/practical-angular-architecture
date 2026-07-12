@@ -16,6 +16,9 @@ export class FeatureProductListEffects {
   private onShellRefreshProducts(): void {
     this.refreshService.refresh$
       .pipe(takeUntilDestroyed(this.onDestroyRef))
-      .subscribe(() => this.store.loadProducts());
+      .subscribe(() => {
+        this.store.invalidateCache();
+        this.store.loadProducts();
+      });
   }
 }
