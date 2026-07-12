@@ -22,7 +22,6 @@ export class FeatureListFacade {
 
   // Navigation guards
   readonly canGoNext = this.store.canGoNext;
-  readonly canGoPrevious = this.store.canGoPrevious;
 
   // UI state (DOES NOT belong to the domain store, but is part of the feature state)
   readonly isFilterModalOpen = signal(false);
@@ -42,8 +41,9 @@ export class FeatureListFacade {
     this.store.loadProducts();
   }
 
-  invalidateCache(): void {
+  refreshProducts(): void {
     this.store.invalidateCache();
+    this.store.loadProducts();
   }
 
   openFilterModal(): void {
@@ -70,18 +70,8 @@ export class FeatureListFacade {
     this.store.loadProducts();
   }
 
-  openNextPage(): void {
-    if (this.store.canGoNext()) {
-      this.store.openNextPage();
-      this.store.loadProducts();
-    }
-  }
-
-  openPreviousPage(): void {
-    if (this.store.canGoPrevious()) {
-      this.store.openPreviousPage();
-      this.store.loadProducts();
-    }
+  loadMore(): void {
+    this.store.loadMoreProducts();
   }
 
   selectProduct(product: Product): void {

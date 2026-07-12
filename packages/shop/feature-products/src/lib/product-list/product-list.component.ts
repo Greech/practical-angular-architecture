@@ -13,6 +13,7 @@ import {
   FilterModalComponent,
   ActiveFiltersComponent,
   ProductFilters,
+  InfiniteScrollDirective,
 } from '@org/shop/shared-ui';
 import { FeatureListFacade } from './feature-list.facade';
 import { FeatureProductListEffects } from './feature-list.effects';
@@ -27,6 +28,7 @@ import { provideDomainProductList } from './domain/provide-domain-product-list';
     ErrorMessageComponent,
     FilterModalComponent,
     ActiveFiltersComponent,
+    InfiniteScrollDirective,
   ],
   providers: [
     ...provideDomainProductList(),
@@ -82,26 +84,16 @@ import { provideDomainProductList } from './domain/provide-domain-product-list';
           (productSelect)="onProductSelect($event)"
         />
 
-        @if (hasMorePages()) {
-          <div class="pagination">
-            <button
-              class="btn-secondary"
-              [disabled]="!canGoPrevious()"
-              (click)="previousPage()"
-            >
-              Previous
-            </button>
-            <span class="page-info">
-              Page {{ currentPage() }} of {{ totalPages() }}
-            </span>
-            <button
-              class="btn-secondary"
-              [disabled]="!canGoNext()"
-              (click)="openNextPage()"
-            >
-              Next
-            </button>
-          </div>
+        <!-- Sentinel element — becomes visible when user reaches the end of the list -->
+        <div
+          shopInfiniteScroll
+          [disabled]="!canGoNext() || loading()"
+          (scrolledToEnd)="loadMore()"
+          class="scroll-sentinel"
+        ></div>
+
+        @if (loading()) {
+          <shop-loading-spinner />
         }
       }
     </div>
@@ -218,6 +210,10 @@ import { provideDomainProductList } from './domain/provide-domain-product-list';
           font-size: 2rem;
         }
       }
+
+      .scroll-sentinel {
+        height: 1px;
+      }
     `,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -243,7 +239,6 @@ export class ProductListComponent implements OnInit {
   readonly hasMorePages = this.featureListFacade.hasMorePages;
   readonly activeFiltersCount = this.featureListFacade.activeFiltersCount;
   readonly canGoNext = this.featureListFacade.canGoNext;
-  readonly canGoPrevious = this.featureListFacade.canGoPrevious;
 
   ngOnInit() {
     this.featureListFacade.loadCategories();
@@ -278,11 +273,7 @@ export class ProductListComponent implements OnInit {
     this.featureListFacade.clearAllFilters();
   }
 
-  openNextPage() {
-    this.featureListFacade.openNextPage();
-  }
-
-  previousPage() {
-    this.featureListFacade.openPreviousPage();
+  loadMore(): void {
+    this.featureListFacade.loadMore();
   }
 }

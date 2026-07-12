@@ -38,6 +38,13 @@ export const initialDomainListState: DomainListState = {
   },
 };
 
+enum FetchPageMode {
+  /** Replaces the current product list — used on initial load and filter changes */
+  Replace = 'replace',
+  /** Appends to the current product list — used for infinite scroll / load more */
+  Append = 'append',
+}
+
 @Injectable()
 export class DomainProductListStore {
   private readonly productsService = inject(ProductsService);
@@ -57,7 +64,6 @@ export class DomainProductListStore {
   readonly canGoNext = computed(
     () => this.store().currentPage < this.store().totalPages,
   );
-  readonly canGoPrevious = computed(() => this.store().currentPage > 1);
 
   loadCategories() {
     this.store.update((state) => ({ ...state, loading: true, error: null }));
@@ -79,47 +85,14 @@ export class DomainProductListStore {
   }
 
   loadProducts() {
-    const filters = this.store().currentFilters;
-    const currentPage = this.store().currentPage;
+    this.fetchPage(FetchPageMode.Replace);
+  }
 
-    const cached = this.cache.get(filters, currentPage);
-    if (cached) {
-      this.store.update((state) => ({
-        ...state,
-        products: cached.items,
-        totalProducts: cached.total,
-        totalPages: cached.totalPages,
-        loading: false,
-        error: null,
-      }));
-      return;
-    }
+  loadMoreProducts(): void {
+    if (!this.canGoNext()) return;
 
-    this.store.update((state) => ({ ...state, loading: true, error: null }));
-
-    this.productsService.getProducts(filters, currentPage).subscribe({
-      next: (response) => {
-        this.cache.set(filters, currentPage, {
-          items: response.items,
-          total: response.total,
-          totalPages: response.totalPages,
-        });
-        this.store.update((state) => ({
-          ...state,
-          products: response.items,
-          totalProducts: response.total,
-          totalPages: response.totalPages,
-          loading: false,
-        }));
-      },
-      error: (err) => {
-        this.store.update((state) => ({
-          ...state,
-          error: 'LOADING_PRODUCTS_FAILED',
-          loading: false,
-        }));
-      },
-    });
+    const nextPage = this.store().currentPage + 1;
+    this.fetchPage(FetchPageMode.Append, nextPage);
   }
 
   applyFilters(filters: ProductFilters): void {
@@ -151,21 +124,62 @@ export class DomainProductListStore {
     }));
   }
 
-  openNextPage(): void {
-    this.store.update((state) => ({
-      ...state,
-      currentPage: state.currentPage + 1,
-    }));
-  }
-
-  openPreviousPage(): void {
-    this.store.update((state) => ({
-      ...state,
-      currentPage: state.currentPage - 1,
-    }));
-  }
-
   invalidateCache(): void {
     this.cache.invalidate();
+  }
+
+  private fetchPage(
+    mode: FetchPageMode,
+    page = this.store().currentPage,
+  ): void {
+    const filters = this.store().currentFilters;
+
+    const cached = this.cache.get(filters, page);
+    if (cached) {
+      this.store.update((state) => ({
+        ...state,
+        currentPage: page,
+        products:
+          mode === FetchPageMode.Append
+            ? [...state.products, ...cached.items]
+            : cached.items,
+        totalProducts: cached.total,
+        totalPages: cached.totalPages,
+        loading: false,
+        error: null,
+      }));
+      return;
+    }
+
+    this.store.update((state) => ({ ...state, loading: true, error: null }));
+
+    this.productsService.getProducts(filters, page).subscribe({
+      next: (response) => {
+        this.cache.set(filters, page, {
+          items: response.items,
+          total: response.total,
+          totalPages: response.totalPages,
+        });
+        this.store.update((state) => ({
+          ...state,
+          currentPage: page,
+          products:
+            mode === FetchPageMode.Append
+              ? [...state.products, ...response.items]
+              : response.items,
+          totalProducts: response.total,
+          totalPages: response.totalPages,
+          loading: false,
+        }));
+      },
+      error: (_err) => {
+        // No rollback needed — currentPage was never changed
+        this.store.update((state) => ({
+          ...state,
+          error: 'LOADING_PRODUCTS_FAILED',
+          loading: false,
+        }));
+      },
+    });
   }
 }
