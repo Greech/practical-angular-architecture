@@ -1,17 +1,11 @@
 import {
   Component,
   inject,
-  signal,
-  computed,
   OnInit,
-  DestroyRef,
   ChangeDetectionStrategy,
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
-import { ProductsService, ShopRefreshService } from '@org/shop/data';
-import { Product, ProductFilter } from '@org/models';
+import { Product } from '@org/models';
 import {
   ProductGridComponent,
   LoadingSpinnerComponent,
@@ -20,6 +14,9 @@ import {
   ActiveFiltersComponent,
   ProductFilters,
 } from '@org/shop/shared-ui';
+import { FeatureListFacade } from './feature-list.facade';
+import { FeatureProductListEffects } from './feature-list.effects';
+import { provideDomainProductList } from './domain/provide-domain-product-list';
 
 @Component({
   selector: 'shop-product-list',
@@ -30,6 +27,11 @@ import {
     ErrorMessageComponent,
     FilterModalComponent,
     ActiveFiltersComponent,
+  ],
+  providers: [
+    ...provideDomainProductList(),
+    FeatureListFacade,
+    FeatureProductListEffects,
   ],
   template: `
     <div class="product-list-container">
@@ -59,7 +61,7 @@ import {
         [isOpen]="isFilterModalOpen()"
         [categories]="categories()"
         [initialFilters]="currentFilters()"
-        (apply)="onFiltersApply($event)"
+        (apply)="onModalFiltersApply($event)"
         (closed)="onFilterModalClose()"
       />
 
@@ -68,7 +70,7 @@ import {
       } @else if (error()) {
         <shop-error-message
           [message]="error() || undefined"
-          (retry)="loadProducts()"
+          (retry)="retryLoad()"
         />
       } @else {
         <div class="results-info">
@@ -84,7 +86,7 @@ import {
           <div class="pagination">
             <button
               class="btn-secondary"
-              [disabled]="currentPage() === 1"
+              [disabled]="!canGoPrevious()"
               (click)="previousPage()"
             >
               Previous
@@ -94,8 +96,8 @@ import {
             </span>
             <button
               class="btn-secondary"
-              [disabled]="currentPage() === totalPages()"
-              (click)="nextPage()"
+              [disabled]="!canGoNext()"
+              (click)="openNextPage()"
             >
               Next
             </button>
@@ -221,135 +223,66 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProductListComponent implements OnInit {
-  private readonly productsService = inject(ProductsService);
-  private readonly router = inject(Router);
-  private readonly refreshService = inject(ShopRefreshService);
-  private readonly destroyRef = inject(DestroyRef);
+  private readonly featureListFacade = inject(FeatureListFacade);
+  // Effects must be injected to be instantiated — Angular DI is lazy.
+  // This triggers the constructor which sets up subscriptions.
+  private readonly effects = inject(FeatureProductListEffects);
 
-  // State signals
-  readonly products = signal<Product[]>([]);
-  readonly totalProducts = signal(0);
-  readonly currentPage = signal(1);
-  readonly totalPages = signal(0);
-  readonly categories = signal<string[]>([]);
-  readonly loading = signal(false);
-  readonly error = signal<string | null>(null);
+  readonly products = this.featureListFacade.products;
+  readonly totalProducts = this.featureListFacade.totalProducts;
+  readonly currentPage = this.featureListFacade.currentPage;
+  readonly totalPages = this.featureListFacade.totalPages;
+  readonly categories = this.featureListFacade.categories;
+  readonly loading = this.featureListFacade.loading;
+  readonly error = this.featureListFacade.error;
 
-  // Filter state
-  readonly currentFilters = signal<ProductFilters>({
-    searchTerm: '',
-    category: '',
-    inStockOnly: false,
-  });
+  readonly currentFilters = this.featureListFacade.currentFilters;
 
-  // Modal state
-  readonly isFilterModalOpen = signal(false);
+  readonly isFilterModalOpen = this.featureListFacade.isFilterModalOpen;
 
-  // Computed values
-  readonly hasMorePages = computed(() => this.totalPages() > 1);
-  readonly activeFiltersCount = computed(() => {
-    const { searchTerm, category, inStockOnly } = this.currentFilters();
-    return (searchTerm ? 1 : 0) + (category ? 1 : 0) + (inStockOnly ? 1 : 0);
-  });
+  readonly hasMorePages = this.featureListFacade.hasMorePages;
+  readonly activeFiltersCount = this.featureListFacade.activeFiltersCount;
+  readonly canGoNext = this.featureListFacade.canGoNext;
+  readonly canGoPrevious = this.featureListFacade.canGoPrevious;
 
   ngOnInit() {
-    this.loadCategories();
-    this.loadProducts();
-    this.refreshService.refresh$
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.loadProducts());
+    this.featureListFacade.loadCategories();
+    this.featureListFacade.loadProducts();
   }
 
-  loadCategories() {
-    this.productsService.getCategories().subscribe({
-      next: (categories) => this.categories.set(categories),
-      error: (err) => console.error('Error loading categories:', err),
-    });
+  retryLoad(): void {
+    this.featureListFacade.loadProducts();
   }
 
-  loadProducts() {
-    this.loading.set(true);
-    this.error.set(null);
-
-    const filter: ProductFilter = {};
-    const { searchTerm, category, inStockOnly } = this.currentFilters();
-
-    if (searchTerm) {
-      filter.searchTerm = searchTerm;
-    }
-    if (category) {
-      filter.category = category;
-    }
-    if (inStockOnly) {
-      filter.inStock = true;
-    }
-
-    this.productsService.getProducts(filter, this.currentPage(), 12).subscribe({
-      next: (response) => {
-        this.products.set(response.items);
-        this.totalProducts.set(response.total);
-        this.totalPages.set(response.totalPages);
-        this.loading.set(false);
-      },
-      error: (err) => {
-        this.error.set('Failed to load products. Please try again.');
-        this.loading.set(false);
-        console.error('Error loading products:', err);
-      },
-    });
+  onProductSelect(product: Product): void {
+    this.featureListFacade.selectProduct(product);
   }
 
   openFilterModal(): void {
-    this.isFilterModalOpen.set(true);
+    this.featureListFacade.openFilterModal();
   }
 
-  onFiltersApply(filters: ProductFilters): void {
-    this.isFilterModalOpen.set(false);
-    this.currentFilters.set(filters);
-    this.currentPage.set(1);
-    this.loadProducts();
+  onModalFiltersApply(filters: ProductFilters): void {
+    this.featureListFacade.applyModalFilters(filters);
   }
 
   onFilterModalClose(): void {
-    this.isFilterModalOpen.set(false);
+    this.featureListFacade.closeFilterModal();
   }
 
   clearFilter(key: keyof ProductFilters): void {
-    const defaults: ProductFilters = {
-      searchTerm: '',
-      category: '',
-      inStockOnly: false,
-    };
-    this.currentFilters.update((f) => ({ ...f, [key]: defaults[key] }));
-    this.currentPage.set(1);
-    this.loadProducts();
+    this.featureListFacade.clearFilter(key);
   }
 
   clearAllFilters(): void {
-    this.currentFilters.set({
-      searchTerm: '',
-      category: '',
-      inStockOnly: false,
-    });
-    this.currentPage.set(1);
-    this.loadProducts();
+    this.featureListFacade.clearAllFilters();
   }
 
-  onProductSelect(product: Product) {
-    this.router.navigate(['/products', product.id]);
-  }
-
-  nextPage() {
-    if (this.currentPage() < this.totalPages()) {
-      this.currentPage.update((page) => page + 1);
-      this.loadProducts();
-    }
+  openNextPage() {
+    this.featureListFacade.openNextPage();
   }
 
   previousPage() {
-    if (this.currentPage() > 1) {
-      this.currentPage.update((page) => page - 1);
-      this.loadProducts();
-    }
+    this.featureListFacade.openPreviousPage();
   }
 }
